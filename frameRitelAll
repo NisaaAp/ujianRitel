@@ -35,7 +35,7 @@ import javax.swing.table.TableColumn;
 
 /**
  *
- * @author Nisa Amelia Putri
+ * @author Nisa Amelia Putri - 2702352282
  */
 public class frameRitel extends javax.swing.JFrame {
 
