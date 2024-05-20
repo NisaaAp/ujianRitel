@@ -1,0 +1,2196 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package ujianRitel;
+
+import static com.sun.xml.internal.fastinfoset.alphabet.BuiltInRestrictedAlphabets.table;
+import javax.swing.*;
+import java.sql.*;
+
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import org.jdesktop.swingx.autocomplete.AutoCompleteDecorator;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Locale;
+import java.util.Optional;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.table.TableColumn;
+
+
+/**
+ *
+ * @author Nisa Amelia Putri
+ */
+public class frameRitel extends javax.swing.JFrame {
+
+    /**
+     * Creates new form frameRitel
+     */
+    
+   
+
+    public frameRitel() {
+        initComponents();
+        buatKoneksi();
+        AutoCompleteDecorator.decorate(jComboBoxPelanggan);
+        AutoCompleteDecorator.decorate(jComboBoxKodeProd);
+        isiComboBoxPelanggan(jComboBoxPelanggan);
+        isiComboBoxProduk(jComboBoxKodeProd);
+        dateFormat = new SimpleDateFormat("yyyy-MM-dd"); // Format tanggal yang sesuai dengan format kolom tanggal di database
+        setTanggalSekarang();
+        
+        TableColumn column = TableTransaksi.getColumnModel().getColumn(4);
+        column.setCellRenderer(new ButtonRenderer());
+        column.setCellEditor(new ButtonEditor(new JCheckBox()));
+
+        tampilkanDataProduk();
+        tampilkanDataPelanggan();
+        tampilkanDataTransaksi();
+        
+                // Menambahkan event listener untuk menangani klik pada baris tabel
+        tabelProduk.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // Mendapatkan indeks baris yang dipilih
+                int selectedRow = tabelProduk.getSelectedRow();
+
+                // Memeriksa apakah baris telah dipilih
+                if (selectedRow != -1) {
+                    // Mendapatkan data produk dari tabel
+                    String kodeProduk = tabelProduk.getValueAt(selectedRow, 0).toString();
+                    String namaProduk = tabelProduk.getValueAt(selectedRow, 1).toString();
+                    String hargaStr = tabelProduk.getValueAt(selectedRow, 2).toString().replaceAll("[Rp,.]", "");
+                    double harga = Double.parseDouble(hargaStr);
+                    int stok = Integer.parseInt(tabelProduk.getValueAt(selectedRow, 3).toString());
+                    String deskripsi = tabelProduk.getValueAt(selectedRow, 4).toString();
+
+                    // Menampilkan data produk terkait di setiap JTextField
+                    kodeProd2.setText(kodeProduk);
+                    namaProduk2.setText(namaProduk);
+                    harga2.setText(String.valueOf(harga));
+                    stok2.setText(String.valueOf(stok));
+                    deskripsi2.setText(deskripsi);
+                    
+                    // Set warna teks untuk label
+                    kodeProd2.setForeground(Color.BLACK);
+                    namaProduk2.setForeground(Color.BLACK);
+                    harga2.setForeground(Color.BLACK);
+                    stok2.setForeground(Color.BLACK);
+                    deskripsi2.setForeground(Color.BLACK);
+                }
+            }
+        });
+        
+        // Menambahkan event listener untuk menangani klik pada baris tabel pelanggan
+        tabelPelanggan.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // Mendapatkan indeks baris yang dipilih
+                int selectedRow = tabelPelanggan.getSelectedRow();
+
+                // Memeriksa apakah baris telah dipilih
+                if (selectedRow != -1) {
+                    // Mendapatkan data pelanggan dari tabel
+                    int idPelanggan = Integer.parseInt(tabelPelanggan.getValueAt(selectedRow, 0).toString());
+                    String nama = tabelPelanggan.getValueAt(selectedRow, 1).toString();
+                    String gender = tabelPelanggan.getValueAt(selectedRow, 2).toString();
+                    String alamat = tabelPelanggan.getValueAt(selectedRow, 3).toString();
+
+                    // Menampilkan data pelanggan terkait di setiap JTextField atau komponen lainnya
+                    namaPelanggan2.setText(nama);
+                    if (gender.equals("L")) {
+                        RadioButtonLaki.setSelected(true);
+                        RadioButtonPerempuan.setSelected(false); // Menonaktifkan radio button perempuan
+                    } else if (gender.equals("P")) {
+                        RadioButtonPerempuan.setSelected(true);
+                        RadioButtonLaki.setSelected(false); // Menonaktifkan radio button laki-laki
+                    }
+                    alamat2.setText(alamat);
+
+                    // Set warna teks untuk label jika diperlukan
+                    namaPelanggan2.setForeground(Color.BLACK);
+                    alamat2.setForeground(Color.BLACK);
+                }
+            }
+            });
+
+
+    }
+    
+    // Deklarasi variabel koneksi
+    private Connection conn;
+    private final String url = "jdbc:mysql://localhost:3306/javagui_ritel"; // Ganti dengan URL database Anda
+    private final String user = "root"; // Ganti dengan username database Anda
+    private final String password = ""; // Ganti dengan password database Anda
+
+    private SimpleDateFormat dateFormat;
+    // Method untuk membuat koneksi dengan database
+    private void buatKoneksi() {
+        try {
+            conn = DriverManager.getConnection(url, user, password);
+        } catch (SQLException e) {
+            System.out.println("Koneksi gagal: " + e.getMessage());
+        }
+    }
+
+    //---------------=====---------PRODUK---------------------------------------------------------
+        private void tampilkanDataProduk() {
+    try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk mendapatkan semua data produk
+        String query = "SELECT * FROM produk";
+
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Eksekusi query dan dapatkan hasilnya
+        ResultSet resultSet = statement.executeQuery();
+
+        // Bersihkan isi tabelProduk
+        DefaultTableModel model = (DefaultTableModel) tabelProduk.getModel();
+        model.setRowCount(0);
+
+        // Tambahkan setiap data produk ke dalam tabelProduk
+        while (resultSet.next()) {
+            String kodeProduk = resultSet.getString("kode_produk");
+            String namaProduk = resultSet.getString("nama_produk");
+            double harga = resultSet.getDouble("harga");
+            int stok = resultSet.getInt("stok");
+            String deskripsi = resultSet.getString("deskripsi");
+
+            NumberFormat rupiahFormat = NumberFormat.getCurrencyInstance(new Locale("id", "ID"));
+            String hargaFormat = rupiahFormat.format(harga);
+            // Tambahkan baris baru ke dalam tabelProduk
+            model.addRow(new Object[]{kodeProduk, namaProduk, hargaFormat, stok, deskripsi});
+        }
+    } catch (SQLException ex) {
+        System.out.println("Error: " + ex.getMessage());
+    }
+    }
+        
+        private boolean cekKodeProduk(String kodeProduk) {
+            try {
+                // Buat koneksi ke database
+                buatKoneksi();
+
+                // Query untuk mencari kode produk di database
+                String query = "SELECT kode_produk FROM produk WHERE kode_produk = ?";
+
+                // Buat prepared statement
+                PreparedStatement statement = conn.prepareStatement(query);
+
+                // Set parameter untuk pencarian
+                statement.setString(1, kodeProduk);
+
+                // Eksekusi query dan dapatkan hasilnya
+                ResultSet resultSet = statement.executeQuery();
+
+                // Jika kode produk sudah ada di database, return true
+                return resultSet.next();
+            } catch (SQLException ex) {
+                System.out.println("Error: " + ex.getMessage());
+                return false;
+            }
+        }
+
+    private void tambahkanProdukBaru(String kodeProduk, String namaProduk, int stok, double harga, String deskripsi) {
+    try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk menambahkan produk baru ke dalam database
+        String query = "INSERT INTO produk (kode_produk, nama_produk, stok, harga, deskripsi) VALUES (?, ?, ?, ?, ?)";
+
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Set parameter untuk penambahan data
+        statement.setString(1, kodeProduk);
+        statement.setString(2, namaProduk);
+        statement.setInt(3, stok);
+        statement.setDouble(4, harga);
+        statement.setString(5, deskripsi);
+
+        // Eksekusi query untuk menambahkan data
+        statement.executeUpdate();
+
+        // Tampilkan pesan sukses
+        JOptionPane.showMessageDialog(this, "Data produk berhasil ditambahkan ke dalam database.");
+        
+        // Refresh tampilan tabel produk
+        tampilkanDataProduk();
+    } catch (SQLException ex) {
+        JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+    }
+    }
+    
+    private void updateProduk(String kodeProduk, String namaProduk, int stok, double harga, String deskripsi) {
+    try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk mengupdate data produk di dalam database
+        String query = "UPDATE produk SET nama_produk=?, stok=?, harga=?, deskripsi=? WHERE kode_produk=?";
+
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Set parameter untuk update data
+        statement.setString(1, namaProduk);
+        statement.setInt(2, stok);
+        statement.setDouble(3, harga);
+        statement.setString(4, deskripsi);
+        statement.setString(5, kodeProduk);
+
+        // Eksekusi query untuk mengupdate data
+        int rowsUpdated = statement.executeUpdate();
+
+        // Tampilkan pesan berhasil atau gagal berdasarkan hasil eksekusi query
+        if (rowsUpdated > 0) {
+            JOptionPane.showMessageDialog(this, "Data produk berhasil diperbarui.");
+            tampilkanDataProduk(); // Refresh tampilan tabel produk setelah update
+        } else {
+            JOptionPane.showMessageDialog(this, "Gagal memperbarui data produk.");
+        }
+    } catch (SQLException ex) {
+        JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+    }
+    }
+
+    private boolean hapusProduk(String kodeProduk) {
+    try {
+        // Create a connection to the database
+        buatKoneksi();
+
+        // Define the delete query
+        String query = "DELETE FROM produk WHERE kode_produk = ?";
+
+        // Create a prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Set the parameter for the kode_produk
+        statement.setString(1, kodeProduk);
+
+        // Execute the query
+        int rowsDeleted = statement.executeUpdate();
+
+        // Check if the deletion was successful
+        return rowsDeleted > 0;
+    } catch (SQLException ex) {
+        // Print the error message if an exception occurs
+        ex.printStackTrace();
+        return false;
+    }
+    }
+    
+    //------------------------------PELANGGAN---------------------------------------------------
+    private void tampilkanDataPelanggan() {
+    try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk mendapatkan semua data pelanggan
+        String query = "SELECT * FROM pelanggan";
+
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Eksekusi query dan dapatkan hasilnya
+        ResultSet resultSet = statement.executeQuery();
+
+        // Bersihkan isi tabelPelanggan
+        DefaultTableModel model = (DefaultTableModel) tabelPelanggan.getModel();
+        model.setRowCount(0);
+
+        // Tambahkan setiap data pelanggan ke dalam tabelPelanggan
+        while (resultSet.next()) {
+            int idPelanggan = resultSet.getInt("id_pelanggan");
+            String namaPelanggan = resultSet.getString("nama");
+            String gender = resultSet.getString("gender");
+            String alamat = resultSet.getString("alamat");
+
+            // Tambahkan baris baru ke dalam tabelPelanggan
+            model.addRow(new Object[]{idPelanggan, namaPelanggan, gender, alamat});
+        }
+    } catch (SQLException ex) {
+        System.out.println("Error: " + ex.getMessage());
+    }
+    }
+    
+        private void tambahkanPelangganBaru(String namaPelanggan, String gender, String alamat) {
+    try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk menambahkan pelanggan baru ke dalam database
+        String query = "INSERT INTO pelanggan (nama, gender, alamat) VALUES (?, ?, ?)";
+
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Set parameter untuk penambahan data
+        statement.setString(1, namaPelanggan);
+        statement.setString(2, gender);
+        statement.setString(3, alamat);
+
+        // Eksekusi query untuk menambahkan data
+        statement.executeUpdate();
+
+        // Tampilkan pesan sukses
+        JOptionPane.showMessageDialog(this, "Data pelanggan berhasil ditambahkan ke dalam database.");
+        
+        // Refresh tampilan tabel pelanggan
+        tampilkanDataPelanggan();
+    } catch (SQLException ex) {
+        JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+    }
+    }
+        
+        private void updatePelanggan(int idPelanggan, String nama, String gender, String alamat) {
+    try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk mengupdate data pelanggan di dalam database
+        String query = "UPDATE pelanggan SET nama=?, gender=?, alamat=? WHERE id_pelanggan=?";
+
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Set parameter untuk update data
+        statement.setString(1, nama);
+        statement.setString(2, gender);
+        statement.setString(3, alamat);
+        statement.setInt(4, idPelanggan);
+
+        // Eksekusi query untuk mengupdate data
+        int rowsUpdated = statement.executeUpdate();
+
+        // Tampilkan pesan berhasil atau gagal berdasarkan hasil eksekusi query
+        if (rowsUpdated > 0) {
+            JOptionPane.showMessageDialog(this, "Data pelanggan berhasil diperbarui.");
+            tampilkanDataPelanggan(); // Refresh tampilan tabel pelanggan setelah update
+        } else {
+            JOptionPane.showMessageDialog(this, "Gagal memperbarui data pelanggan.");
+        }
+    } catch (SQLException ex) {
+        JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+    }
+    }
+        
+        private boolean hapusPelanggan(int idPelanggan) {
+    try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk menghapus data pelanggan dari database
+        String query = "DELETE FROM pelanggan WHERE id_pelanggan = ?";
+
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Set parameter untuk id_pelanggan
+        statement.setInt(1, idPelanggan);
+
+        // Eksekusi query untuk menghapus data
+        int rowsDeleted = statement.executeUpdate();
+
+        // Return true jika penghapusan berhasil, false jika tidak
+        return rowsDeleted > 0;
+    } catch (SQLException ex) {
+        JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+        return false;
+    }
+}
+
+
+
+   
+    //--------------------TRANSAKSI--------------------------------
+    // Method untuk mengisi nilai ComboBox dari tabel pelanggan
+    private void isiComboBoxPelanggan(JComboBox<String> comboBox) {
+        buatKoneksi(); // Membuat koneksi dengan database
+
+        String query = "SELECT nama FROM pelanggan"; // Query untuk mengambil data nama_pelanggan dari tabel pelanggan
+
+        try (PreparedStatement statement = conn.prepareStatement(query);
+             ResultSet resultSet = statement.executeQuery()) {
+
+            // Bersihkan item-item yang ada di JComboBox sebelum menambahkan data baru
+            comboBox.removeAllItems();
+
+            // Tambahkan data nama_pelanggan dari hasil query ke dalam JComboBox
+            while (resultSet.next()) {
+                String namaPelanggan = resultSet.getString("nama");
+                comboBox.addItem(namaPelanggan);
+            }
+
+        } catch (SQLException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+    
+    // Method untuk mengisi nilai ComboBox dari tabel pelanggan
+    private void isiComboBoxProduk(JComboBox<String> comboBox) {
+        buatKoneksi(); // Membuat koneksi dengan database
+
+        String query = "SELECT kode_produk FROM produk"; // Query untuk mengambil data nama_pelanggan dari tabel pelanggan
+
+        try (PreparedStatement statement = conn.prepareStatement(query);
+             ResultSet resultSet = statement.executeQuery()) {
+
+            // Bersihkan item-item yang ada di JComboBox sebelum menambahkan data baru
+            comboBox.removeAllItems();
+
+            // Tambahkan data nama_pelanggan dari hasil query ke dalam JComboBox
+            while (resultSet.next()) {
+                String kodeProduk = resultSet.getString("kode_produk");
+                comboBox.addItem(kodeProduk);
+            }
+
+        } catch (SQLException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
+    
+    private void setTanggalSekarang() {
+        Calendar cal = Calendar.getInstance(); // Dapatkan instance dari Calendar yang mewakili tanggal dan waktu saat ini
+        tgl2.setText(dateFormat.format(cal.getTime())); // Format tanggal sesuai dengan format SimpleDateFormat dan atur ke tgl2
+    }
+    
+    private void hitungTotalBiaya() {
+    double totalBiaya = 0.0;
+    DefaultTableModel model = (DefaultTableModel) TableListProduk.getModel();
+    int rowCount = model.getRowCount();
+    for (int i = 0; i < rowCount; i++) {
+        String subtotalStr = model.getValueAt(i, 4).toString().replace(".", "").replace(",", ".");
+        double subtotal = Double.parseDouble(subtotalStr);
+        totalBiaya += subtotal;
+    }
+    NumberFormat rupiahFormat = NumberFormat.getCurrencyInstance(new Locale("id", "ID"));
+    String totalBiayaFormat = rupiahFormat.format(totalBiaya);
+    total2.setText(totalBiayaFormat);
+    }
+    
+    private void updateStokProduk(String kodeProduk, int qty) throws SQLException {
+    // Ambil stok produk saat ini dari database
+    String query = "SELECT stok FROM produk WHERE kode_produk = ?";
+    PreparedStatement stmt = conn.prepareStatement(query);
+    stmt.setString(1, kodeProduk);
+    ResultSet rs = stmt.executeQuery();
+    if (rs.next()) {
+        int stokSaatIni = rs.getInt("stok");
+        int stokBaru = stokSaatIni - qty;
+
+        // Update stok produk di database
+        String updateQuery = "UPDATE produk SET stok = ? WHERE kode_produk = ?";
+        PreparedStatement updateStmt = conn.prepareStatement(updateQuery);
+        updateStmt.setInt(1, stokBaru);
+        updateStmt.setString(2, kodeProduk);
+        updateStmt.executeUpdate();
+    }
+    }
+    
+    private int getIdPelanggan(String namaPelanggan) throws SQLException {
+        String query = "SELECT id_pelanggan FROM pelanggan WHERE nama = ?";
+        PreparedStatement stmt = conn.prepareStatement(query);
+        stmt.setString(1, namaPelanggan);
+        ResultSet rs = stmt.executeQuery();
+        if (rs.next()) {
+            return rs.getInt("id_pelanggan");
+        }
+        return -1;
+    }
+    
+    private void tampilkanDataTransaksi() {
+    try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk mendapatkan semua data transaksi
+        String query = "SELECT transaksi.id_transaksi, pelanggan.nama, transaksi.tanggal, transaksi.total FROM transaksi INNER JOIN pelanggan ON transaksi.id_pelanggan = pelanggan.id_pelanggan";
+
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Eksekusi query dan dapatkan hasilnya
+        ResultSet resultSet = statement.executeQuery();
+
+        // Bersihkan isi tabelTransaksi
+        DefaultTableModel model = (DefaultTableModel) TableTransaksi.getModel();
+        model.setRowCount(0);
+
+        // Tambahkan setiap data transaksi ke dalam tabelTransaksi
+        while (resultSet.next()) {
+            int idTransaksi = resultSet.getInt("id_transaksi");
+            String namaPelanggan = resultSet.getString("nama");
+            String tanggal = resultSet.getString("tanggal");
+            double total = resultSet.getDouble("total");
+
+            NumberFormat rupiahFormat = NumberFormat.getCurrencyInstance(new Locale("id", "ID"));
+    String totalFormat = rupiahFormat.format(total);
+            // Tambahkan baris baru ke dalam tabelTransaksi
+            model.addRow(new Object[]{idTransaksi, namaPelanggan, tanggal, totalFormat, "Lihat Detail"});
+        }
+    } catch (SQLException ex) {
+        System.out.println("Error: " + ex.getMessage());
+    }
+    }
+    
+    private class ButtonRenderer extends JButton implements TableCellRenderer {
+
+    public ButtonRenderer() {
+        setOpaque(true);
+    }
+
+    @Override
+    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+        setText((value == null) ? "" : value.toString());
+        return this;
+    }
+}
+
+private class ButtonEditor extends DefaultCellEditor {
+
+    private JButton button;
+    private String label;
+    private boolean isPushed;
+
+    public ButtonEditor(JCheckBox checkBox) {
+        super(checkBox);
+        button = new JButton();
+        button.setOpaque(true);
+        button.addActionListener(e -> fireEditingStopped());
+    }
+
+    @Override
+    public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+        if (isSelected) {
+            button.setForeground(table.getSelectionForeground());
+            button.setBackground(table.getSelectionBackground());
+        } else {
+            button.setForeground(table.getForeground());
+            button.setBackground(UIManager.getColor("Button.background"));
+        }
+        label = (value == null) ? "" : value.toString();
+        button.setText(label);
+        isPushed = true;
+        return button;
+    }
+
+    @Override
+    public Object getCellEditorValue() {
+        if (isPushed) {
+            // Panggil metode untuk menampilkan detail produk
+            tampilkanDetailProduk((int) TableTransaksi.getValueAt(TableTransaksi.getSelectedRow(), 0));
+        }
+        isPushed = false;
+        return label;
+    }
+
+    @Override
+    public boolean stopCellEditing() {
+        isPushed = false;
+        return super.stopCellEditing();
+    }
+    }
+   
+    private void tampilkanDetailProduk(int idTransaksi) {
+       try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk mendapatkan detail produk yang dibeli pada transaksi tertentu
+        String query = "SELECT d.kode_produk, p.nama_produk, p.deskripsi, d.harga, d.qty, d.subtotal " +
+                       "FROM detail_transaksi d " +
+                       "INNER JOIN produk p ON d.kode_produk = p.kode_produk " +
+                       "WHERE d.id_transaksi = ?";
+        
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+        statement.setInt(1, idTransaksi);
+
+        // Eksekusi query dan dapatkan hasilnya
+        ResultSet resultSet = statement.executeQuery();
+
+        // Buat string builder untuk menyimpan detail produk
+        StringBuilder detailProduk = new StringBuilder();
+        detailProduk.append("<html><body><table>");
+
+        // Tambahkan header tabel
+        detailProduk.append("<tr><th>Kode Produk</th><th>Nama Produk</th><th>Deskripsi</th><th>Harga</th><th>Jumlah</th><th>Subtotal</th></tr>");
+
+        // Tambahkan setiap baris data produk ke dalam tabel
+        while (resultSet.next()) {
+            String kodeProduk = resultSet.getString("kode_produk");
+            String namaProduk = resultSet.getString("nama_produk");
+            String deskripsi = resultSet.getString("deskripsi");
+            double harga = resultSet.getDouble("harga");
+            int qty = resultSet.getInt("qty");
+            double subtotal = resultSet.getDouble("subtotal");
+
+            NumberFormat rupiahFormat = NumberFormat.getCurrencyInstance(new Locale("id", "ID"));
+            String hargaFormat = rupiahFormat.format(harga);
+            String subtotalFormat = rupiahFormat.format(harga);
+
+            detailProduk.append("<tr>");
+            detailProduk.append("<td>").append(kodeProduk).append("</td>");
+            detailProduk.append("<td>").append(namaProduk).append("</td>");
+            detailProduk.append("<td>").append(deskripsi).append("</td>");
+            detailProduk.append("<td>").append(hargaFormat).append("</td>");
+            detailProduk.append("<td>").append(qty).append("</td>");
+            detailProduk.append("<td>").append(subtotalFormat).append("</td>");
+            detailProduk.append("</tr>");
+        }
+
+        // Tutup tag tabel dan body
+        detailProduk.append("</table></body></html>");
+
+        // Tampilkan popup dengan detail produk
+        JOptionPane.showMessageDialog(this, detailProduk.toString(), "Detail Produk", JOptionPane.PLAIN_MESSAGE);
+    } catch (SQLException ex) {
+        System.out.println("Error: " + ex.getMessage());
+    }
+    }
+    
+    private void cariTransaksi(String keyword) {
+    try {
+        // Buat koneksi ke database
+        buatKoneksi();
+
+        // Query untuk mencari transaksi berdasarkan nama pelanggan atau ID transaksi
+        String query = "SELECT transaksi.id_transaksi, pelanggan.nama, transaksi.tanggal, transaksi.total " +
+                       "FROM transaksi " +
+                       "INNER JOIN pelanggan ON transaksi.id_pelanggan = pelanggan.id_pelanggan " +
+                       "WHERE pelanggan.nama LIKE ? OR transaksi.id_transaksi = ?";
+
+        // Buat prepared statement
+        PreparedStatement statement = conn.prepareStatement(query);
+
+        // Set parameter untuk pencarian
+        statement.setString(1, "%" + keyword + "%");
+        try {
+            int idTransaksi = Integer.parseInt(keyword);
+            statement.setInt(2, idTransaksi);
+        } catch (NumberFormatException e) {
+            // Jika tidak bisa di-parse sebagai integer, maka set parameter kedua ke 0
+            statement.setInt(2, 0);
+        }
+
+        // Eksekusi query dan dapatkan hasilnya
+        ResultSet resultSet = statement.executeQuery();
+
+        // Bersihkan isi tabelTransaksi
+        DefaultTableModel model = (DefaultTableModel) TableTransaksi.getModel();
+        model.setRowCount(0);
+
+        // Tambahkan setiap data transaksi ke dalam tabelTransaksi
+        while (resultSet.next()) {
+            int idTransaksi = resultSet.getInt("id_transaksi");
+            String namaPelanggan = resultSet.getString("nama");
+            String tanggal = resultSet.getString("tanggal");
+            double total = resultSet.getDouble("total");
+            
+            NumberFormat rupiahFormat = NumberFormat.getCurrencyInstance(new Locale("id", "ID"));
+rupiahFormat.setMaximumFractionDigits(0); // Set maksimum digit desimal menjadi 0
+String totalFormat = rupiahFormat.format(total);
+
+            // Tambahkan baris baru ke dalam tabelTransaksi
+            model.addRow(new Object[]{idTransaksi, namaPelanggan, tanggal, totalFormat, "Lihat Detail"});
+        }
+    } catch (SQLException ex) {
+        System.out.println("Error: " + ex.getMessage());
+    }
+    }
+    /**
+     * This method is called from within the constructor to initialize the form.
+     * WARNING: Do NOT modify this code. The content of this method is always
+     * regenerated by the Form Editor.
+     */
+    
+    @SuppressWarnings("unchecked")
+    // <editor-fold defaultstate="collapsed" desc="Generated Code">                          
+    private void initComponents() {
+
+        tabbedPaneCustom1 = new ujianRitel.TabbedPaneCustom();
+        buttonGroup1 = new javax.swing.ButtonGroup();
+        kodeProduk1 = new javax.swing.JLabel();
+        jTabbedPane1 = new javax.swing.JTabbedPane();
+        jPanel1 = new javax.swing.JPanel();
+        jLabel1 = new javax.swing.JLabel();
+        jScrollPane1 = new javax.swing.JScrollPane();
+        tabelProduk = new javax.swing.JTable();
+        jLabel4 = new javax.swing.JLabel();
+        namaProduk = new javax.swing.JLabel();
+        stok = new javax.swing.JLabel();
+        hargaProduk = new javax.swing.JLabel();
+        deskripsiProduk = new javax.swing.JLabel();
+        namaProduk2 = new javax.swing.JTextField();
+        stok2 = new javax.swing.JTextField();
+        harga2 = new javax.swing.JTextField();
+        jScrollPane2 = new javax.swing.JScrollPane();
+        deskripsi2 = new javax.swing.JTextArea();
+        buttonTambah = new javax.swing.JButton();
+        buttonUpdate = new javax.swing.JButton();
+        buttonCancel = new javax.swing.JButton();
+        buttonHapus = new javax.swing.JButton();
+        kodeProduk = new javax.swing.JLabel();
+        kodeProd2 = new javax.swing.JTextField();
+        jPanel2 = new javax.swing.JPanel();
+        jScrollPane3 = new javax.swing.JScrollPane();
+        tabelPelanggan = new javax.swing.JTable();
+        jLabel5 = new javax.swing.JLabel();
+        jLabel6 = new javax.swing.JLabel();
+        gender = new javax.swing.JLabel();
+        namaPelanggan2 = new javax.swing.JTextField();
+        alamat = new javax.swing.JLabel();
+        jScrollPane4 = new javax.swing.JScrollPane();
+        alamat2 = new javax.swing.JTextArea();
+        TambahPelanggan = new javax.swing.JButton();
+        buttonUpdatePelanggan = new javax.swing.JButton();
+        buttonCancelPelanggan = new javax.swing.JButton();
+        buttonHapusPelanggan = new javax.swing.JButton();
+        namaPelanggan = new javax.swing.JLabel();
+        RadioButtonLaki = new javax.swing.JRadioButton();
+        RadioButtonPerempuan = new javax.swing.JRadioButton();
+        jPanel3 = new javax.swing.JPanel();
+        jLabel7 = new javax.swing.JLabel();
+        pelangganTrans = new javax.swing.JLabel();
+        kodeProdTrans = new javax.swing.JLabel();
+        tgl = new javax.swing.JLabel();
+        hargaProdTrans = new javax.swing.JLabel();
+        jumlahProdTrans = new javax.swing.JLabel();
+        tgl2 = new javax.swing.JTextField();
+        hargaProdTrans2 = new javax.swing.JTextField();
+        jumlahProdTrans2 = new javax.swing.JTextField();
+        tambahList = new javax.swing.JButton();
+        jScrollPane5 = new javax.swing.JScrollPane();
+        TableListProduk = new javax.swing.JTable();
+        jLabel8 = new javax.swing.JLabel();
+        jLabel2 = new javax.swing.JLabel();
+        total2 = new javax.swing.JTextField();
+        hapusProd = new javax.swing.JButton();
+        buttonBayar = new javax.swing.JButton();
+        jComboBoxPelanggan = new javax.swing.JComboBox<>();
+        jComboBoxKodeProd = new javax.swing.JComboBox<>();
+        jPanel4 = new javax.swing.JPanel();
+        jLabel9 = new javax.swing.JLabel();
+        cari = new javax.swing.JLabel();
+        cari2 = new javax.swing.JTextField();
+        jScrollPane6 = new javax.swing.JScrollPane();
+        TableTransaksi = new javax.swing.JTable();
+
+        kodeProduk1.setFont(new java.awt.Font("Book Antiqua", 0, 18)); // NOI18N
+        kodeProduk1.setText("Kode produk");
+
+        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+
+        jTabbedPane1.setAlignmentX(4.0F);
+        jTabbedPane1.setPreferredSize(new java.awt.Dimension(200, 100));
+
+        jLabel1.setFont(new java.awt.Font("Book Antiqua", 3, 20)); // NOI18N
+        jLabel1.setText("FORM PRODUK");
+
+        tabelProduk.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        tabelProduk.setModel(new javax.swing.table.DefaultTableModel(
+            new Object [][] {
+                {null, null, null, null, null},
+                {null, null, null, null, null},
+                {null, null, null, null, null},
+                {null, null, null, null, null}
+            },
+            new String [] {
+                "Kode Produk", "NAMA", "HARGA", "STOK", "DESKRIPSI"
+            }
+        ));
+        jScrollPane1.setViewportView(tabelProduk);
+
+        jLabel4.setFont(new java.awt.Font("Book Antiqua", 3, 30)); // NOI18N
+        jLabel4.setText("DATA PRODUK");
+
+        namaProduk.setFont(new java.awt.Font("Book Antiqua", 0, 18)); // NOI18N
+        namaProduk.setText("Nama ");
+
+        stok.setFont(new java.awt.Font("Book Antiqua", 0, 18)); // NOI18N
+        stok.setText("Stok");
+
+        hargaProduk.setFont(new java.awt.Font("Book Antiqua", 0, 18)); // NOI18N
+        hargaProduk.setText("Harga");
+
+        deskripsiProduk.setFont(new java.awt.Font("Book Antiqua", 0, 18)); // NOI18N
+        deskripsiProduk.setText("Deskripsi");
+
+        namaProduk2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        namaProduk2.setForeground(new java.awt.Color(153, 153, 153));
+        namaProduk2.setText("Masukkan nama");
+        namaProduk2.setName("halo"); // NOI18N
+        namaProduk2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                namaProduk2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                namaProduk2FocusLost(evt);
+            }
+        });
+        namaProduk2.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                namaProduk2ActionPerformed(evt);
+            }
+        });
+
+        stok2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        stok2.setForeground(new java.awt.Color(153, 153, 153));
+        stok2.setText("Masukkan stok produk");
+        stok2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                stok2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                stok2FocusLost(evt);
+            }
+        });
+        stok2.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                stok2ActionPerformed(evt);
+            }
+        });
+
+        harga2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        harga2.setForeground(new java.awt.Color(153, 153, 153));
+        harga2.setText("Masukkan harga");
+        harga2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                harga2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                harga2FocusLost(evt);
+            }
+        });
+
+        deskripsi2.setColumns(20);
+        deskripsi2.setForeground(new java.awt.Color(153, 153, 153));
+        deskripsi2.setRows(5);
+        deskripsi2.setText("Masukkan deskripsi produk");
+        deskripsi2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                deskripsi2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                deskripsi2FocusLost(evt);
+            }
+        });
+        jScrollPane2.setViewportView(deskripsi2);
+
+        buttonTambah.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        buttonTambah.setText("Tambah");
+        buttonTambah.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                buttonTambahActionPerformed(evt);
+            }
+        });
+
+        buttonUpdate.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        buttonUpdate.setText("Update");
+        buttonUpdate.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                buttonUpdateActionPerformed(evt);
+            }
+        });
+
+        buttonCancel.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        buttonCancel.setText("Cancel");
+        buttonCancel.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                buttonCancelActionPerformed(evt);
+            }
+        });
+
+        buttonHapus.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        buttonHapus.setText("Hapus");
+        buttonHapus.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                buttonHapusActionPerformed(evt);
+            }
+        });
+
+        kodeProduk.setFont(new java.awt.Font("Book Antiqua", 0, 18)); // NOI18N
+        kodeProduk.setText("Kode produk");
+
+        kodeProd2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        kodeProd2.setForeground(new java.awt.Color(153, 153, 153));
+        kodeProd2.setText("Masukkan kode");
+        kodeProd2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                kodeProd2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                kodeProd2FocusLost(evt);
+            }
+        });
+        kodeProd2.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                kodeProd2ActionPerformed(evt);
+            }
+        });
+
+        javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
+        jPanel1.setLayout(jPanel1Layout);
+        jPanel1Layout.setHorizontalGroup(
+            jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel1Layout.createSequentialGroup()
+                .addGap(25, 25, 25)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 568, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(29, 29, 29)
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                    .addGroup(javax.swing.GroupLayout.Alignment.LEADING, jPanel1Layout.createSequentialGroup()
+                        .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 412, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addContainerGap())
+                    .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(jPanel1Layout.createSequentialGroup()
+                                .addGap(45, 45, 45)
+                                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                    .addComponent(namaProduk)
+                                    .addComponent(stok)
+                                    .addComponent(hargaProduk)
+                                    .addComponent(deskripsiProduk)
+                                    .addComponent(kodeProduk))
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 7, Short.MAX_VALUE))
+                            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
+                                .addGap(0, 0, Short.MAX_VALUE)
+                                .addComponent(buttonTambah)))
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING, false)
+                            .addGroup(jPanel1Layout.createSequentialGroup()
+                                .addGap(78, 78, 78)
+                                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                                    .addComponent(namaProduk2)
+                                    .addComponent(stok2, javax.swing.GroupLayout.DEFAULT_SIZE, 206, Short.MAX_VALUE)
+                                    .addComponent(harga2)
+                                    .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 195, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addComponent(kodeProd2))
+                                .addGap(70, 70, 70))
+                            .addGroup(jPanel1Layout.createSequentialGroup()
+                                .addGap(24, 24, 24)
+                                .addComponent(buttonUpdate)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 18, Short.MAX_VALUE)
+                                .addComponent(buttonCancel)
+                                .addGap(28, 28, 28)
+                                .addComponent(buttonHapus)
+                                .addGap(37, 37, 37))))))
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jLabel4, javax.swing.GroupLayout.PREFERRED_SIZE, 304, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(376, 376, 376))
+        );
+        jPanel1Layout.setVerticalGroup(
+            jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel1Layout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jLabel4, javax.swing.GroupLayout.PREFERRED_SIZE, 56, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                    .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addGap(1, 1, 1)
+                        .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 56, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(kodeProduk)
+                            .addComponent(kodeProd2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(22, 22, 22)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(namaProduk)
+                            .addComponent(namaProduk2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(27, 27, 27)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(stok)
+                            .addComponent(stok2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(24, 24, 24)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(hargaProduk)
+                            .addComponent(harga2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(33, 33, 33)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(deskripsiProduk)
+                            .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(buttonTambah)
+                            .addComponent(buttonUpdate)
+                            .addComponent(buttonCancel)
+                            .addComponent(buttonHapus))
+                        .addGap(63, 63, 63))))
+        );
+
+        jTabbedPane1.addTab("PRODUK", jPanel1);
+
+        tabelPelanggan.setBorder(new javax.swing.border.SoftBevelBorder(javax.swing.border.BevelBorder.RAISED));
+        tabelPelanggan.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        tabelPelanggan.setModel(new javax.swing.table.DefaultTableModel(
+            new Object [][] {
+                {null, null, null, null},
+                {null, null, null, null},
+                {null, null, null, null},
+                {null, null, null, null}
+            },
+            new String [] {
+                "ID Pelanggan", "NAMA", "Gender", "Alamat"
+            }
+        ) {
+            Class[] types = new Class [] {
+                java.lang.Object.class, java.lang.String.class, java.lang.Object.class, java.lang.Object.class
+            };
+
+            public Class getColumnClass(int columnIndex) {
+                return types [columnIndex];
+            }
+        });
+        jScrollPane3.setViewportView(tabelPelanggan);
+        if (tabelPelanggan.getColumnModel().getColumnCount() > 0) {
+            tabelPelanggan.getColumnModel().getColumn(0).setPreferredWidth(110);
+            tabelPelanggan.getColumnModel().getColumn(0).setMaxWidth(200);
+            tabelPelanggan.getColumnModel().getColumn(1).setPreferredWidth(110);
+            tabelPelanggan.getColumnModel().getColumn(1).setMaxWidth(250);
+            tabelPelanggan.getColumnModel().getColumn(2).setMaxWidth(450);
+            tabelPelanggan.getColumnModel().getColumn(3).setResizable(false);
+        }
+
+        jLabel5.setFont(new java.awt.Font("Book Antiqua", 3, 30)); // NOI18N
+        jLabel5.setText("DATA PELANGGAN");
+
+        jLabel6.setFont(new java.awt.Font("Book Antiqua", 3, 20)); // NOI18N
+        jLabel6.setText("FORM PELANGGAN");
+
+        gender.setFont(new java.awt.Font("Book Antiqua", 0, 18)); // NOI18N
+        gender.setText("Gender ");
+
+        namaPelanggan2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        namaPelanggan2.setForeground(new java.awt.Color(153, 153, 153));
+        namaPelanggan2.setText("Masukkan nama");
+        namaPelanggan2.setName("halo"); // NOI18N
+        namaPelanggan2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                namaPelanggan2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                namaPelanggan2FocusLost(evt);
+            }
+        });
+        namaPelanggan2.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                namaPelanggan2ActionPerformed(evt);
+            }
+        });
+
+        alamat.setFont(new java.awt.Font("Book Antiqua", 0, 18)); // NOI18N
+        alamat.setText("Alamat");
+
+        alamat2.setColumns(20);
+        alamat2.setFont(new java.awt.Font("Book Antiqua", 0, 13)); // NOI18N
+        alamat2.setForeground(new java.awt.Color(153, 153, 153));
+        alamat2.setRows(5);
+        alamat2.setText("Masukkan alamat Anda");
+        alamat2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                alamat2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                alamat2FocusLost(evt);
+            }
+        });
+        jScrollPane4.setViewportView(alamat2);
+
+        TambahPelanggan.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        TambahPelanggan.setText("Tambah");
+        TambahPelanggan.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                TambahPelangganActionPerformed(evt);
+            }
+        });
+
+        buttonUpdatePelanggan.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        buttonUpdatePelanggan.setText("Update");
+        buttonUpdatePelanggan.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                buttonUpdatePelangganActionPerformed(evt);
+            }
+        });
+
+        buttonCancelPelanggan.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        buttonCancelPelanggan.setText("Cancel");
+        buttonCancelPelanggan.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                buttonCancelPelangganActionPerformed(evt);
+            }
+        });
+
+        buttonHapusPelanggan.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        buttonHapusPelanggan.setText("Hapus");
+        buttonHapusPelanggan.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                buttonHapusPelangganActionPerformed(evt);
+            }
+        });
+
+        namaPelanggan.setFont(new java.awt.Font("Book Antiqua", 0, 18)); // NOI18N
+        namaPelanggan.setText("Nama");
+
+        RadioButtonLaki.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        RadioButtonLaki.setText("Laki-laki");
+
+        RadioButtonPerempuan.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        RadioButtonPerempuan.setText("Perempuan");
+
+        javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
+        jPanel2.setLayout(jPanel2Layout);
+        jPanel2Layout.setHorizontalGroup(
+            jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel2Layout.createSequentialGroup()
+                .addGap(25, 25, 25)
+                .addComponent(jScrollPane3, javax.swing.GroupLayout.PREFERRED_SIZE, 568, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel2Layout.createSequentialGroup()
+                        .addGap(74, 74, 74)
+                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                            .addGroup(jPanel2Layout.createSequentialGroup()
+                                .addGap(0, 0, Short.MAX_VALUE)
+                                .addComponent(gender)
+                                .addGap(829, 829, 829))
+                            .addGroup(javax.swing.GroupLayout.Alignment.LEADING, jPanel2Layout.createSequentialGroup()
+                                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                                    .addComponent(jLabel6, javax.swing.GroupLayout.Alignment.LEADING, javax.swing.GroupLayout.PREFERRED_SIZE, 412, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addGroup(javax.swing.GroupLayout.Alignment.LEADING, jPanel2Layout.createSequentialGroup()
+                                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                            .addComponent(namaPelanggan)
+                                            .addComponent(alamat))
+                                        .addGap(119, 119, 119)
+                                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                                            .addGroup(jPanel2Layout.createSequentialGroup()
+                                                .addComponent(RadioButtonLaki)
+                                                .addGap(18, 18, 18)
+                                                .addComponent(RadioButtonPerempuan))
+                                            .addComponent(namaPelanggan2)
+                                            .addComponent(jScrollPane4))))
+                                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
+                    .addGroup(jPanel2Layout.createSequentialGroup()
+                        .addGap(85, 85, 85)
+                        .addComponent(TambahPelanggan)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addComponent(buttonUpdatePelanggan)
+                        .addGap(26, 26, 26)
+                        .addComponent(buttonCancelPelanggan)
+                        .addGap(18, 18, 18)
+                        .addComponent(buttonHapusPelanggan)
+                        .addGap(0, 0, Short.MAX_VALUE))))
+            .addGroup(jPanel2Layout.createSequentialGroup()
+                .addGap(423, 423, 423)
+                .addComponent(jLabel5, javax.swing.GroupLayout.PREFERRED_SIZE, 304, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(0, 0, Short.MAX_VALUE))
+        );
+        jPanel2Layout.setVerticalGroup(
+            jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel2Layout.createSequentialGroup()
+                .addGap(9, 9, 9)
+                .addComponent(jLabel5, javax.swing.GroupLayout.PREFERRED_SIZE, 56, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel2Layout.createSequentialGroup()
+                        .addComponent(jScrollPane3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                    .addGroup(jPanel2Layout.createSequentialGroup()
+                        .addComponent(jLabel6, javax.swing.GroupLayout.PREFERRED_SIZE, 56, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 89, Short.MAX_VALUE)
+                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(namaPelanggan)
+                            .addComponent(namaPelanggan2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(32, 32, 32)
+                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(gender)
+                            .addComponent(RadioButtonLaki)
+                            .addComponent(RadioButtonPerempuan))
+                        .addGap(39, 39, 39)
+                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(alamat)
+                            .addComponent(jScrollPane4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(47, 47, 47)
+                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(TambahPelanggan)
+                            .addComponent(buttonUpdatePelanggan)
+                            .addComponent(buttonCancelPelanggan)
+                            .addComponent(buttonHapusPelanggan))
+                        .addGap(83, 83, 83))))
+        );
+
+        jTabbedPane1.addTab("PELANGGAN", jPanel2);
+
+        jLabel7.setFont(new java.awt.Font("Book Antiqua", 3, 30)); // NOI18N
+        jLabel7.setText("FORM TRANSAKSI ");
+
+        pelangganTrans.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        pelangganTrans.setText("NAMA PELANGGAN");
+
+        kodeProdTrans.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        kodeProdTrans.setText("KODE PRODUK");
+
+        tgl.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        tgl.setText("TANGGAL");
+
+        hargaProdTrans.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        hargaProdTrans.setText("HARGA");
+
+        jumlahProdTrans.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        jumlahProdTrans.setText("JUMLAH");
+
+        tgl2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        tgl2.setDisabledTextColor(new java.awt.Color(0, 0, 0));
+        tgl2.setEnabled(false);
+        tgl2.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                tgl2ActionPerformed(evt);
+            }
+        });
+
+        hargaProdTrans2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        hargaProdTrans2.setText("Masukkan harga");
+        hargaProdTrans2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                hargaProdTrans2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                hargaProdTrans2FocusLost(evt);
+            }
+        });
+
+        jumlahProdTrans2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        jumlahProdTrans2.setForeground(new java.awt.Color(153, 153, 153));
+        jumlahProdTrans2.setText("Jumlah produk dibeli");
+        jumlahProdTrans2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                jumlahProdTrans2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                jumlahProdTrans2FocusLost(evt);
+            }
+        });
+
+        tambahList.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        tambahList.setText("Tambahkan ke list produk");
+        tambahList.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                tambahListActionPerformed(evt);
+            }
+        });
+
+        TableListProduk.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        TableListProduk.setModel(new javax.swing.table.DefaultTableModel(
+            new Object [][] {
+
+            },
+            new String [] {
+                "Kode Produk", "Nama Produk", "Jumlah", "Harga", "Subtotal"
+            }
+        ));
+        jScrollPane5.setViewportView(TableListProduk);
+
+        jLabel8.setFont(new java.awt.Font("Book Antiqua", 3, 18)); // NOI18N
+        jLabel8.setText("LIST PRODUK");
+
+        jLabel2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        jLabel2.setText("TOTAL BIAYA :");
+
+        total2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+
+        hapusProd.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        hapusProd.setText("Hapus Produk");
+        hapusProd.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                hapusProdActionPerformed(evt);
+            }
+        });
+
+        buttonBayar.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        buttonBayar.setText("BAYAR");
+        buttonBayar.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                buttonBayarActionPerformed(evt);
+            }
+        });
+
+        jComboBoxPelanggan.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+
+        jComboBoxKodeProd.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        jComboBoxKodeProd.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Item 1", "Item 2", "Item 3", "Item 4" }));
+        jComboBoxKodeProd.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jComboBoxKodeProdActionPerformed(evt);
+            }
+        });
+
+        javax.swing.GroupLayout jPanel3Layout = new javax.swing.GroupLayout(jPanel3);
+        jPanel3.setLayout(jPanel3Layout);
+        jPanel3Layout.setHorizontalGroup(
+            jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel3Layout.createSequentialGroup()
+                .addGap(0, 0, Short.MAX_VALUE)
+                .addComponent(jLabel8, javax.swing.GroupLayout.PREFERRED_SIZE, 304, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(74, 74, 74))
+            .addGroup(jPanel3Layout.createSequentialGroup()
+                .addGap(99, 99, 99)
+                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                    .addComponent(buttonBayar)
+                    .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(jPanel3Layout.createSequentialGroup()
+                            .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                .addComponent(pelangganTrans)
+                                .addComponent(kodeProdTrans)
+                                .addComponent(tgl)
+                                .addComponent(hargaProdTrans)
+                                .addComponent(jumlahProdTrans))
+                            .addGap(117, 117, 117)
+                            .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                                .addComponent(jumlahProdTrans2, javax.swing.GroupLayout.DEFAULT_SIZE, 200, Short.MAX_VALUE)
+                                .addComponent(hargaProdTrans2, javax.swing.GroupLayout.DEFAULT_SIZE, 200, Short.MAX_VALUE)
+                                .addComponent(tgl2, javax.swing.GroupLayout.DEFAULT_SIZE, 200, Short.MAX_VALUE)
+                                .addComponent(jComboBoxPelanggan, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(jComboBoxKodeProd, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                            .addGap(49, 49, 49)
+                            .addComponent(jScrollPane5, javax.swing.GroupLayout.PREFERRED_SIZE, 497, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGroup(jPanel3Layout.createSequentialGroup()
+                            .addComponent(tambahList)
+                            .addGap(34, 34, 34)
+                            .addComponent(hapusProd)
+                            .addGap(231, 231, 231)
+                            .addComponent(jLabel2)
+                            .addGap(57, 57, 57)
+                            .addComponent(total2, javax.swing.GroupLayout.PREFERRED_SIZE, 204, javax.swing.GroupLayout.PREFERRED_SIZE))))
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel3Layout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jLabel7, javax.swing.GroupLayout.PREFERRED_SIZE, 304, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(400, 400, 400))
+        );
+        jPanel3Layout.setVerticalGroup(
+            jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel3Layout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jLabel7, javax.swing.GroupLayout.PREFERRED_SIZE, 56, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                    .addGroup(jPanel3Layout.createSequentialGroup()
+                        .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                            .addComponent(pelangganTrans)
+                            .addComponent(jComboBoxPelanggan, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(jPanel3Layout.createSequentialGroup()
+                                .addGap(18, 18, 18)
+                                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                                    .addComponent(kodeProdTrans)
+                                    .addComponent(jComboBoxKodeProd, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                .addGap(120, 120, 120))
+                            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel3Layout.createSequentialGroup()
+                                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                                    .addComponent(tgl2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addComponent(tgl))
+                                .addGap(18, 18, 18)
+                                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                                    .addComponent(hargaProdTrans2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addComponent(hargaProdTrans))
+                                .addGap(28, 28, 28)))
+                        .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(jumlahProdTrans2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(jumlahProdTrans))
+                        .addGap(30, 30, 30))
+                    .addGroup(jPanel3Layout.createSequentialGroup()
+                        .addComponent(jLabel8, javax.swing.GroupLayout.PREFERRED_SIZE, 56, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(jScrollPane5, javax.swing.GroupLayout.PREFERRED_SIZE, 239, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel3Layout.createSequentialGroup()
+                        .addGap(49, 49, 49)
+                        .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(tambahList)
+                            .addComponent(hapusProd)))
+                    .addGroup(jPanel3Layout.createSequentialGroup()
+                        .addGap(30, 30, 30)
+                        .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(jLabel2)
+                            .addComponent(total2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))))
+                .addGap(23, 23, 23)
+                .addComponent(buttonBayar)
+                .addContainerGap(82, Short.MAX_VALUE))
+        );
+
+        jTabbedPane1.addTab("TRANSAKSI", jPanel3);
+
+        jLabel9.setFont(new java.awt.Font("Book Antiqua", 3, 30)); // NOI18N
+        jLabel9.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        jLabel9.setText("RIWAYAT  TRANSAKSI ");
+
+        cari.setFont(new java.awt.Font("Book Antiqua", 1, 18)); // NOI18N
+        cari.setText("Cari Data");
+
+        cari2.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        cari2.setForeground(new java.awt.Color(153, 153, 153));
+        cari2.setText("Cari dengan nama atau id transaksi");
+        cari2.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent evt) {
+                cari2FocusGained(evt);
+            }
+            public void focusLost(java.awt.event.FocusEvent evt) {
+                cari2FocusLost(evt);
+            }
+        });
+        cari2.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                cari2ActionPerformed(evt);
+            }
+        });
+
+        TableTransaksi.setFont(new java.awt.Font("Book Antiqua", 0, 16)); // NOI18N
+        TableTransaksi.setModel(new javax.swing.table.DefaultTableModel(
+            new Object [][] {
+                {null, null, null, null, ""},
+                {null, null, null, null, null},
+                {null, null, null, null, null},
+                {null, null, null, null, null}
+            },
+            new String [] {
+                "ID Transaksi", "Nama Pelanggan", "Tanggal Transaksi", "Total", "Aksi"
+            }
+        ));
+        TableTransaksi.setRowHeight(40);
+        jScrollPane6.setViewportView(TableTransaksi);
+
+        javax.swing.GroupLayout jPanel4Layout = new javax.swing.GroupLayout(jPanel4);
+        jPanel4.setLayout(jPanel4Layout);
+        jPanel4Layout.setHorizontalGroup(
+            jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel4Layout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jLabel9, javax.swing.GroupLayout.PREFERRED_SIZE, 352, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(389, 389, 389))
+            .addGroup(jPanel4Layout.createSequentialGroup()
+                .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel4Layout.createSequentialGroup()
+                        .addGap(306, 306, 306)
+                        .addComponent(cari, javax.swing.GroupLayout.PREFERRED_SIZE, 104, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(45, 45, 45)
+                        .addComponent(cari2, javax.swing.GroupLayout.PREFERRED_SIZE, 316, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(jPanel4Layout.createSequentialGroup()
+                        .addGap(33, 33, 33)
+                        .addComponent(jScrollPane6, javax.swing.GroupLayout.PREFERRED_SIZE, 1080, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                .addContainerGap(23, Short.MAX_VALUE))
+        );
+        jPanel4Layout.setVerticalGroup(
+            jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel4Layout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jLabel9, javax.swing.GroupLayout.PREFERRED_SIZE, 56, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(18, 18, 18)
+                .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(cari2, javax.swing.GroupLayout.PREFERRED_SIZE, 45, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(cari))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jScrollPane6, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+        );
+
+        jTabbedPane1.addTab("RIWAYAT TRANSAKSI", jPanel4);
+
+        javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
+        getContentPane().setLayout(layout);
+        layout.setHorizontalGroup(
+            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(layout.createSequentialGroup()
+                .addComponent(jTabbedPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 1141, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(0, 8, Short.MAX_VALUE))
+        );
+        layout.setVerticalGroup(
+            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jTabbedPane1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+        );
+
+        pack();
+    }// </editor-fold>                        
+
+    private void stok2ActionPerformed(java.awt.event.ActionEvent evt) {                                      
+        // TODO add your handling code here:
+    }                                     
+
+    private void namaProduk2FocusGained(java.awt.event.FocusEvent evt) {                                        
+        // TODO add your handling code here:
+        if(namaProduk2.getText().equals("Masukkan nama"))
+        {
+            namaProduk2.setText("");
+            namaProduk2.setForeground(new Color(0,0,0));
+
+        }
+    }                                       
+
+    private void namaProduk2FocusLost(java.awt.event.FocusEvent evt) {                                      
+        // TODO add your handling code here:
+        if(namaProduk2.getText().equals(""))
+        {
+            namaProduk2.setText("Masukkan nama");
+                        namaProduk2.setForeground(new Color(153,153,153));
+
+//            namaProduk2.setForeground(new Color(0,0,0));
+        }
+    }                                     
+
+    private void stok2FocusGained(java.awt.event.FocusEvent evt) {                                  
+        // TODO add your handling code here:
+         if(stok2.getText().equals("Masukkan stok produk"))
+        {
+            stok2.setText("");
+            stok2.setForeground(new Color(0,0,0));
+
+        }
+    }                                 
+
+    private void stok2FocusLost(java.awt.event.FocusEvent evt) {                                
+        // TODO add your handling code here:
+          if(stok2.getText().equals(""))
+        {
+            stok2.setText("Masukkan stok produk");
+            stok2.setForeground(new Color(153,153,153));
+
+        }
+    }                               
+
+    private void harga2FocusGained(java.awt.event.FocusEvent evt) {                                   
+        // TODO add your handling code here:
+           if(harga2.getText().equals("Masukkan harga"))
+        {
+            harga2.setText("");
+            harga2.setForeground(new Color(0,0,0));
+
+        }
+    }                                  
+
+    private void harga2FocusLost(java.awt.event.FocusEvent evt) {                                 
+        // TODO add your handling code here:
+        if(harga2.getText().equals(""))
+        {
+            harga2.setText("Masukkan harga");
+            harga2.setForeground(new Color(153,153,153));
+
+        }
+    }                                
+
+    private void deskripsi2FocusGained(java.awt.event.FocusEvent evt) {                                       
+        // TODO add your handling code here:
+        if(deskripsi2.getText().equals("Masukkan deskripsi produk"))
+        {
+            deskripsi2.setText("");
+            deskripsi2.setForeground(new Color(0,0,0));
+
+        }
+    }                                      
+
+    private void deskripsi2FocusLost(java.awt.event.FocusEvent evt) {                                     
+        // TODO add your handling code here:
+         if(deskripsi2.getText().equals(""))
+        {
+            deskripsi2.setText("Masukkan deskripsi produk");
+            deskripsi2.setForeground(new Color(153,153,153));
+
+        }
+    }                                    
+
+     
+    private void buttonHapusPelangganActionPerformed(java.awt.event.ActionEvent evt) {                                                     
+        // TODO add your handling code here:
+        // Dapatkan baris yang dipilih
+    int selectedRowIndex = tabelPelanggan.getSelectedRow();
+
+    // Periksa apakah ada baris yang dipilih
+    if (selectedRowIndex == -1) {
+        // Jika tidak ada baris yang dipilih, tampilkan pesan error
+        JOptionPane.showMessageDialog(this, "Silakan pilih pelanggan yang ingin dihapus.", "Error", JOptionPane.ERROR_MESSAGE);
+        return;
+    }
+
+    // Dapatkan id_pelanggan dari baris yang dipilih
+    int idPelanggan = Integer.parseInt(tabelPelanggan.getValueAt(selectedRowIndex, 0).toString());
+
+    // Tampilkan dialog konfirmasi
+    int response = JOptionPane.showConfirmDialog(this, "Apakah Anda yakin ingin menghapus pelanggan dengan ID " + idPelanggan + "?", "Konfirmasi", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+
+    // Jika pengguna mengonfirmasi penghapusan
+    if (response == JOptionPane.YES_OPTION) {
+        // Hapus pelanggan dari database
+        if (hapusPelanggan(idPelanggan)) {
+            // Tampilkan pesan sukses
+            JOptionPane.showMessageDialog(this, "Pelanggan berhasil dihapus dari database.", "Success", JOptionPane.INFORMATION_MESSAGE);
+
+            // Refresh tabel pelanggan untuk mencerminkan perubahan
+            tampilkanDataPelanggan();
+        } else {
+            // Tampilkan pesan error jika penghapusan gagal
+            JOptionPane.showMessageDialog(this, "Gagal menghapus pelanggan dari database.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    }                                                    
+
+    private void buttonCancelPelangganActionPerformed(java.awt.event.ActionEvent evt) {                                                      
+        // TODO add your handling code here:
+        // Reset nilai setiap JTextField ke nilai default
+    
+    namaPelanggan2.setText("Masukkan nama");
+    RadioButtonLaki.setSelected(false);
+    RadioButtonPerempuan.setSelected(false);
+    alamat2.setText("Masukkan alamat");
+
+    // Set warna teks untuk label jika diperlukan
+    namaPelanggan2.setForeground(new Color(153, 153, 153));
+    alamat2.setForeground(new Color(153, 153, 153));
+    }                                                     
+
+    private void buttonUpdatePelangganActionPerformed(java.awt.event.ActionEvent evt) {                                                      
+        // TODO add your handling code here:
+        // Mendapatkan indeks baris yang dipilih
+        int selectedRow = tabelPelanggan.getSelectedRow();
+
+        // Memeriksa apakah baris telah dipilih
+        if (selectedRow != -1) {
+            int idPelanggan = Integer.parseInt(tabelPelanggan.getValueAt(selectedRow, 0).toString());
+            String namaPelanggan = namaPelanggan2.getText();
+            String gender = RadioButtonLaki.isSelected() ? "L" : "P";
+            String alamat = alamat2.getText();
+
+            // Update data pelanggan di dalam database
+            updatePelanggan(idPelanggan, namaPelanggan, gender, alamat);
+        } else {
+            // Tampilkan pesan kesalahan jika tidak ada baris yang dipilih
+            JOptionPane.showMessageDialog(this, "Silakan pilih pelanggan yang ingin diperbarui.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }                                                     
+
+    private void TambahPelangganActionPerformed(java.awt.event.ActionEvent evt) {                                                
+        // TODO add your handling code here:
+        String namaPelanggan = namaPelanggan2.getText();
+        String gender = RadioButtonLaki.isSelected() ? "L" : "P";
+        String alamat = alamat2.getText();
+
+        // Tambahkan data pelanggan baru ke dalam database
+        tambahkanPelangganBaru(namaPelanggan, gender, alamat);
+    }                                               
+
+    private void alamat2FocusLost(java.awt.event.FocusEvent evt) {                                  
+        // TODO add your handling code here:
+         if(alamat2.getText().equals("Masukkan alamat Anda"))
+        {
+            alamat2.setText("");
+            alamat2.setForeground(new Color(153,153,153));
+
+        }
+    }                                 
+
+    private void alamat2FocusGained(java.awt.event.FocusEvent evt) {                                    
+        // TODO add your handling code here:
+         
+           if(alamat2.getText().equals("Masukkan alamat Anda"))
+        {
+            alamat2.setText("");
+            alamat2.setForeground(new Color(0,0,0));
+
+        }
+    }                                   
+
+    private void namaPelanggan2FocusLost(java.awt.event.FocusEvent evt) {                                         
+        // TODO add your handling code here:
+       
+           if(namaPelanggan2.getText().equals(""))
+        {
+            namaPelanggan2.setText("Masukkan nama");
+            namaPelanggan2.setForeground(new Color(153,153,153));
+
+        }
+    }                                        
+
+    private void namaPelanggan2FocusGained(java.awt.event.FocusEvent evt) {                                           
+        // TODO add your handling code here:
+           if(namaPelanggan2.getText().equals("Masukkan nama"))
+        {
+            namaPelanggan2.setText("");
+            namaPelanggan2.setForeground(new Color(0,0,0));
+
+        }
+    }                                          
+
+    private void kodeProd2ActionPerformed(java.awt.event.ActionEvent evt) {                                          
+        // TODO add your handling code here:
+    }                                         
+
+    private void kodeProd2FocusGained(java.awt.event.FocusEvent evt) {                                      
+        // TODO add your handling code here:
+          if(kodeProd2.getText().equals("Masukkan kode"))
+        {
+            kodeProd2.setText("");
+            kodeProd2.setForeground(new Color(0,0,0));
+
+        }
+    }                                     
+
+    private void buttonCancelActionPerformed(java.awt.event.ActionEvent evt) {                                             
+        // TODO add your handling code here:
+        kodeProd2.setText("Masukkan kode");
+        namaProduk2.setText("Masukkan nama");
+        harga2.setText("Masukkan harga");
+        stok2.setText("Masukkan stok produk");
+        deskripsi2.setText("Masukkan deskripsi produk");
+        
+        // Set warna teks untuk label
+       kodeProd2.setForeground(new Color(153,153,153));
+        namaProduk2.setForeground(new Color(153,153,153));
+        harga2.setForeground(new Color(153,153,153));
+        stok2.setForeground(new Color(153,153,153));
+        deskripsi2.setForeground(new Color(153,153,153));
+    }                                            
+
+    private void buttonUpdateActionPerformed(java.awt.event.ActionEvent evt) {                                             
+        // TODO add your handling code here:
+        // Ambil nilai dari setiap TextField
+    String kodeProduk = kodeProd2.getText();
+    String namaProduk = namaProduk2.getText();
+    int stok = Integer.parseInt(stok2.getText());
+    double harga = Double.parseDouble(harga2.getText());
+    String deskripsi = deskripsi2.getText();
+
+    try {
+        // Cek apakah kode produk sudah ada di database selain milik produk yang sedang diperbarui
+        if (cekKodeProduk(kodeProduk) && !kodeProduk.equals(tabelProduk.getValueAt(tabelProduk.getSelectedRow(), 0))) {
+            JOptionPane.showMessageDialog(this, "Kode produk sudah ada dalam database dan tidak dapat diubah.", "Error", JOptionPane.ERROR_MESSAGE);
+        } else {
+            // Update data produk ke dalam database
+            updateProduk(kodeProduk, namaProduk, stok, harga, deskripsi);
+        }
+    } catch (NumberFormatException e) {
+        JOptionPane.showMessageDialog(this, "Silakan isi dengan angka pada field yang sesuai.", "Error", JOptionPane.ERROR_MESSAGE);
+    }
+    }                                            
+
+    private void buttonTambahActionPerformed(java.awt.event.ActionEvent evt) {                                             
+        // TODO add your handling code here:
+        // Ambil nilai dari setiap JTextField
+    String kodeProduk = kodeProd2.getText();
+    String namaProduk = namaProduk2.getText();
+    int stok = Integer.parseInt(stok2.getText());
+    double harga = Double.parseDouble(harga2.getText());
+    String deskripsi = deskripsi2.getText();
+    
+    // Periksa apakah kode produk sudah ada di database
+    if (cekKodeProduk(kodeProduk)) {
+        // Jika kode produk sudah ada, tampilkan pesan kesalahan
+        JOptionPane.showMessageDialog(this, "Kode produk sudah ada dalam database.", "Error", JOptionPane.ERROR_MESSAGE);
+    } else {
+        // Jika kode produk belum ada, tambahkan data ke dalam database
+        tambahkanProdukBaru(kodeProduk, namaProduk, stok, harga, deskripsi);
+    }
+        
+    }                                            
+
+    private void kodeProd2FocusLost(java.awt.event.FocusEvent evt) {                                    
+        // TODO add your handling code here:
+          if(kodeProd2.getText().equals(""))
+        {
+            kodeProd2.setText("Masukkan kode");
+            kodeProd2.setForeground(new Color(153,153,153));
+
+        }
+    }                                   
+
+    private void tgl2ActionPerformed(java.awt.event.ActionEvent evt) {                                     
+        // TODO add your handling code here:
+    }                                    
+
+    private void jComboBoxKodeProdActionPerformed(java.awt.event.ActionEvent evt) {                                                  
+        // TODO add your handling code here:
+           // Ambil kode produk yang dipilih
+        String kodeProduk = (String) jComboBoxKodeProd.getSelectedItem();
+        
+        // Jika tidak ada kode produk yang dipilih, keluar dari method
+        if (kodeProduk == null) {
+            return;
+        }
+        
+        // Ambil nama produk dan harga produk dari database sesuai dengan kode produk yang dipilih
+        String query = "SELECT  harga FROM produk WHERE kode_produk = ?";
+        
+        try (PreparedStatement statement = conn.prepareStatement(query)) {
+            statement.setString(1, kodeProduk); // Set parameter kode produk
+            ResultSet resultSet = statement.executeQuery();
+            
+            // Jika ada hasil dari query, set nilai nama produk dan harga produk pada JTextField
+            if (resultSet.next()) {
+//                String namaProduk = resultSet.getString("nama_produk");
+                String hargaProduk = resultSet.getString("harga");
+//                namaProduk2.setText(namaProduk);
+                hargaProdTrans2.setText(hargaProduk);
+            } else {
+                // Jika tidak ada hasil dari query, set nilai nama produk dan harga produk menjadi kosong
+                namaProduk2.setText("");
+                hargaProdTrans2.setText("");
+                hargaProdTrans2.setForeground(new Color(0,0,0));
+            }
+        } catch (SQLException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }                                                 
+
+    private void hargaProdTrans2FocusGained(java.awt.event.FocusEvent evt) {                                            
+        // TODO add your handling code here:
+          if(hargaProdTrans2.getText().equals("Masukkan harga"))
+        {
+            hargaProdTrans2.setText("");
+            hargaProdTrans2.setForeground(new Color(0,0,0));
+
+        }
+    }                                           
+
+    private void hargaProdTrans2FocusLost(java.awt.event.FocusEvent evt) {                                          
+        // TODO add your handling code here:
+          if(hargaProdTrans2.getText().equals(""))
+        {
+            hargaProdTrans2.setText("Masukkan harga");
+            hargaProdTrans2.setForeground(new Color(0,0,0));
+
+        }
+    }                                         
+
+    private void jumlahProdTrans2FocusGained(java.awt.event.FocusEvent evt) {                                             
+        // TODO add your handling code here:
+          if(jumlahProdTrans2.getText().equals("Jumlah produk dibeli"))
+        {
+            jumlahProdTrans2.setText("");
+            jumlahProdTrans2.setForeground(new Color(0,0,0));
+
+        }
+    }                                            
+
+    private void jumlahProdTrans2FocusLost(java.awt.event.FocusEvent evt) {                                           
+        // TODO add your handling code here:
+          if(jumlahProdTrans2.getText().equals(""))
+        {
+            jumlahProdTrans2.setText("Jumlah produk dibeli");
+            jumlahProdTrans2.setForeground(new Color(153,153,153));
+
+        }
+    }                                          
+
+    private void tambahListActionPerformed(java.awt.event.ActionEvent evt) {                                           
+        // TODO add your handling code here:
+        String kodeProduk = jComboBoxKodeProd.getSelectedItem().toString();
+    
+    // 2. Dapatkan informasi nama produk dan harga dari database berdasarkan kode produk
+    String namaProduk = "";
+    double hargaProduk = 0.0;
+    String query = "SELECT nama_produk, harga FROM produk WHERE kode_produk = ?";
+    try (PreparedStatement statement = conn.prepareStatement(query)) {
+        statement.setString(1, kodeProduk);
+        ResultSet resultSet = statement.executeQuery();
+        if (resultSet.next()) {
+            namaProduk = resultSet.getString("nama_produk");
+            hargaProduk = resultSet.getDouble("harga");
+        }
+    } catch (SQLException e) {
+        System.out.println("Error: " + e.getMessage());
+    }
+    
+    // 3. Dapatkan nilai jumlah dari jumlahProdTrans2
+    int jumlah = Integer.parseInt(jumlahProdTrans2.getText());
+    
+    // 4. Hitung subtotal harga (harga * jumlah)
+    double subtotal = hargaProduk * jumlah;
+    NumberFormat rupiahFormat = NumberFormat.getCurrencyInstance(new Locale("id", "ID"));
+    String hargaFormat = rupiahFormat.format(hargaProduk);
+    
+    String subtotalFormat = rupiahFormat.format(subtotal);
+    
+    // 5. Tambahkan semua nilai tersebut ke dalam tabel TableListProduk
+    DefaultTableModel model = (DefaultTableModel) TableListProduk.getModel();
+    model.addRow(new Object[]{kodeProduk, namaProduk, jumlah, hargaProduk, subtotal});
+    hitungTotalBiaya();
+    }                                          
+
+    private void hapusProdActionPerformed(java.awt.event.ActionEvent evt) {                                          
+        // TODO add your handling code here:
+        int selectedRow = TableListProduk.getSelectedRow();
+       if (selectedRow != -1) {
+        // Tampilkan alert konfirmasi
+        int confirm = JOptionPane.showConfirmDialog(this, "Apakah kamu yakin ingin menghapus produk ini?", "Konfirmasi", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            // Jika pengguna menekan tombol "Yes" pada alert konfirmasi
+            DefaultTableModel model = (DefaultTableModel) TableListProduk.getModel();
+            model.removeRow(selectedRow);
+
+            // Setelah menghapus produk, hitung total biaya
+            hitungTotalBiaya();
+        }
+       }
+    }                                         
+
+    private void buttonBayarActionPerformed(java.awt.event.ActionEvent evt) {                                            
+        // TODO add your handling code here:
+        try {
+        // Ambil ID pelanggan dari ComboBox
+        String namaPelanggan = jComboBoxPelanggan.getSelectedItem().toString();
+        int idPelanggan = getIdPelanggan(namaPelanggan);
+        
+        // Ambil tanggal dari komponen input
+        String tanggal = tgl2.getText();
+        
+        // Hitung total biaya
+        double totalBiaya = Double.parseDouble(total2.getText().replace("Rp", "").replaceAll("[.,]", ""));
+        
+        
+        // Sisipkan data ke dalam tabel 'transaksi'
+        String insertTransaksiQuery = "INSERT INTO transaksi (id_pelanggan, tanggal, total) VALUES (?, ?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(insertTransaksiQuery, Statement.RETURN_GENERATED_KEYS);
+        stmt.setInt(1, idPelanggan);
+        stmt.setString(2, tanggal);
+        stmt.setDouble(3, totalBiaya);
+        stmt.executeUpdate();
+        
+        // Dapatkan ID transaksi yang baru saja dimasukkan
+        ResultSet generatedKeys = stmt.getGeneratedKeys();
+        int idTransaksi = -1;
+        if (generatedKeys.next()) {
+            idTransaksi = generatedKeys.getInt(1);
+        }
+        
+        // Sisipkan data ke dalam tabel 'detail_transaksi' untuk setiap entri di tabel 'TableListProduk'
+        String insertDetailTransaksiQuery = "INSERT INTO detail_transaksi (id_transaksi, kode_produk, harga, qty, subtotal) VALUES (?, ?, ?, ?, ?)";
+        DefaultTableModel model = (DefaultTableModel) TableListProduk.getModel();
+        for (int i = 0; i < model.getRowCount(); i++) {
+            String kodeProduk = model.getValueAt(i, 0).toString();
+            double hargaProduk = Double.parseDouble(model.getValueAt(i, 3).toString().replace(",", ""));
+            int qty = Integer.parseInt(model.getValueAt(i, 2).toString());
+            double subtotal = Double.parseDouble(model.getValueAt(i, 4).toString().replace(",", ""));
+            
+            // Update stok produk di database
+            updateStokProduk(kodeProduk, qty);
+            
+            PreparedStatement detailStmt = conn.prepareStatement(insertDetailTransaksiQuery);
+            detailStmt.setInt(1, idTransaksi);
+            detailStmt.setString(2, kodeProduk);
+            detailStmt.setDouble(3, hargaProduk);
+            detailStmt.setInt(4, qty);
+            detailStmt.setDouble(5, subtotal);
+            detailStmt.executeUpdate();
+        }
+        
+        JOptionPane.showMessageDialog(this, "Transaksi berhasil disimpan.");
+    } catch (SQLException ex) {
+        JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+    }
+    }                                           
+
+    private void cari2ActionPerformed(java.awt.event.ActionEvent evt) {                                      
+        // TODO add your handling code here:
+        // Ambil teks dari field pencarian
+    String keyword = cari2.getText().trim();
+
+    if (!keyword.isEmpty()) {
+        // Hapus spasi ekstra dari keyword
+
+        // Panggil metode pencarian
+        cariTransaksi(keyword);
+    } else {
+        // Jika field pencarian kosong, tampilkan semua data transaksi
+        tampilkanDataTransaksi();
+    }
+    }                                     
+
+    private void cari2FocusGained(java.awt.event.FocusEvent evt) {                                  
+        // TODO add your handling code here:
+        if(cari2.getText().equals("Cari dengan nama atau id transaksi"))
+        {
+            cari2.setText("");
+            cari2.setForeground(new Color(0,0,0));
+
+        }
+    }                                 
+
+    private void cari2FocusLost(java.awt.event.FocusEvent evt) {                                
+        
+        if(cari2.getText().equals(""))
+        {
+            cari2.setText("Cari dengan nama atau id transaksi");
+            cari2.setForeground(new Color(153,153,153));
+
+        }
+    }                               
+
+    private void namaProduk2ActionPerformed(java.awt.event.ActionEvent evt) {                                            
+        // TODO add your handling code here:
+    }                                           
+
+    private void buttonHapusActionPerformed(java.awt.event.ActionEvent evt) {                                            
+        // Get the selected row index
+    int selectedRowIndex = tabelProduk.getSelectedRow();
+
+    // Check if a row is selected
+    if (selectedRowIndex == -1) {
+        // If no row is selected, show an error message and return
+        JOptionPane.showMessageDialog(this, "Silakan pilih produk yang ingin dihapus.", "Error", JOptionPane.ERROR_MESSAGE);
+        return;
+    }
+
+    // Get the kode_produk of the selected row
+    String kodeProduk = tabelProduk.getValueAt(selectedRowIndex, 0).toString();
+
+    // Show a confirmation dialog
+    int confirmationResult = JOptionPane.showConfirmDialog(this, "Apakah kamu yakin ingin menghapus produk dengan kode " + kodeProduk + "?", "Hapus produk", JOptionPane.YES_NO_OPTION);
+
+    // Check if the user clicked YES
+    if (confirmationResult == JOptionPane.YES_OPTION) {
+        // If the user confirmed the deletion, execute the delete query
+        if (hapusProduk(kodeProduk)) {
+            // Show a success message
+            JOptionPane.showMessageDialog(this, "Produk berhasil dihapus dari database.", "Success", JOptionPane.INFORMATION_MESSAGE);
+
+            // Refresh the table to reflect the changes
+            tampilkanDataProduk();
+        } else {
+            // Show an error message if the deletion failed
+            JOptionPane.showMessageDialog(this, "Gagal menghapus produk dari database.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    }                                           
+
+    private void namaPelanggan2ActionPerformed(java.awt.event.ActionEvent evt) {                                               
+        // TODO add your handling code here:
+    }                                              
+
+    
+    
+    
+    
+    
+    /**
+     * @param args the command line arguments
+     */
+    public static void main(String args[]) {
+        /* Set the Nimbus look and feel */
+        //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
+        /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
+         * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html 
+         */
+        try {
+            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equals(info.getName())) {
+                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
+            }
+        } catch (ClassNotFoundException ex) {
+            java.util.logging.Logger.getLogger(frameRitel.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        } catch (InstantiationException ex) {
+            java.util.logging.Logger.getLogger(frameRitel.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        } catch (IllegalAccessException ex) {
+            java.util.logging.Logger.getLogger(frameRitel.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        } catch (javax.swing.UnsupportedLookAndFeelException ex) {
+            java.util.logging.Logger.getLogger(frameRitel.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
+        }
+        //</editor-fold>
+
+        /* Create and display the form */
+        java.awt.EventQueue.invokeLater(new Runnable() {
+            public void run() {
+                new frameRitel().setVisible(true);
+            }
+        });
+    }
+
+    // Variables declaration - do not modify                     
+    private javax.swing.JRadioButton RadioButtonLaki;
+    private javax.swing.JRadioButton RadioButtonPerempuan;
+    private javax.swing.JTable TableListProduk;
+    private javax.swing.JTable TableTransaksi;
+    private javax.swing.JButton TambahPelanggan;
+    private javax.swing.JLabel alamat;
+    private javax.swing.JTextArea alamat2;
+    private javax.swing.JButton buttonBayar;
+    private javax.swing.JButton buttonCancel;
+    private javax.swing.JButton buttonCancelPelanggan;
+    private javax.swing.ButtonGroup buttonGroup1;
+    private javax.swing.JButton buttonHapus;
+    private javax.swing.JButton buttonHapusPelanggan;
+    private javax.swing.JButton buttonTambah;
+    private javax.swing.JButton buttonUpdate;
+    private javax.swing.JButton buttonUpdatePelanggan;
+    private javax.swing.JLabel cari;
+    private javax.swing.JTextField cari2;
+    private javax.swing.JTextArea deskripsi2;
+    private javax.swing.JLabel deskripsiProduk;
+    private javax.swing.JLabel gender;
+    private javax.swing.JButton hapusProd;
+    private javax.swing.JTextField harga2;
+    private javax.swing.JLabel hargaProdTrans;
+    private javax.swing.JTextField hargaProdTrans2;
+    private javax.swing.JLabel hargaProduk;
+    private javax.swing.JComboBox<String> jComboBoxKodeProd;
+    private javax.swing.JComboBox<String> jComboBoxPelanggan;
+    private javax.swing.JLabel jLabel1;
+    private javax.swing.JLabel jLabel2;
+    private javax.swing.JLabel jLabel4;
+    private javax.swing.JLabel jLabel5;
+    private javax.swing.JLabel jLabel6;
+    private javax.swing.JLabel jLabel7;
+    private javax.swing.JLabel jLabel8;
+    private javax.swing.JLabel jLabel9;
+    private javax.swing.JPanel jPanel1;
+    private javax.swing.JPanel jPanel2;
+    private javax.swing.JPanel jPanel3;
+    private javax.swing.JPanel jPanel4;
+    private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JScrollPane jScrollPane2;
+    private javax.swing.JScrollPane jScrollPane3;
+    private javax.swing.JScrollPane jScrollPane4;
+    private javax.swing.JScrollPane jScrollPane5;
+    private javax.swing.JScrollPane jScrollPane6;
+    private javax.swing.JTabbedPane jTabbedPane1;
+    private javax.swing.JLabel jumlahProdTrans;
+    private javax.swing.JTextField jumlahProdTrans2;
+    private javax.swing.JTextField kodeProd2;
+    private javax.swing.JLabel kodeProdTrans;
+    private javax.swing.JLabel kodeProduk;
+    private javax.swing.JLabel kodeProduk1;
+    private javax.swing.JLabel namaPelanggan;
+    private javax.swing.JTextField namaPelanggan2;
+    private javax.swing.JLabel namaProduk;
+    private javax.swing.JTextField namaProduk2;
+    private javax.swing.JLabel pelangganTrans;
+    private javax.swing.JLabel stok;
+    private javax.swing.JTextField stok2;
+    private ujianRitel.TabbedPaneCustom tabbedPaneCustom1;
+    private javax.swing.JTable tabelPelanggan;
+    private javax.swing.JTable tabelProduk;
+    private javax.swing.JButton tambahList;
+    private javax.swing.JLabel tgl;
+    private javax.swing.JTextField tgl2;
+    private javax.swing.JTextField total2;
+    // End of variables declaration                   
+}
